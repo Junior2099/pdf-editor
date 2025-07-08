@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Editor Pro - Edição de Páginas</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+     <link rel="icon" href="https://img.icons8.com/?size=100&id=mcyAsTDJNTI9&format=png&color=000000" type="image/png">
+    <style>
+        :root {
+            --primary-color: #4a6bdf;
+            --secondary-color: #f8f9fa;
+            --danger-color: #e74c3c;
+            --success-color: #2ecc71;
+            --text-color: #333;
+            --light-text: #777;
+            --border-color: #ddd;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f5f5f5;
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .app-header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 1.5rem;
+            text-align: center;
+            box-shadow: var(--shadow);
+        }
+
+        .app-header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .app-header p {
+            font-size: 1rem;
+            opacity: 0.9;
+        }
+
+        .main-container {
+            flex: 1;
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .file-upload,
+        .page-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #3a5bd0;
+        }
+
+        .btn-success {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #27ae60;
+        }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #c0392b;
+        }
+
+        .btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .editor-container {
+            display: flex;
+            gap: 2rem;
+            height: calc(100vh - 250px);
+        }
+
+        .thumbnail-sidebar {
+            width: 250px;
+            background-color: white;
+            border-radius: 8px;
+            padding: 1rem;
+            box-shadow: var(--shadow);
+            overflow-y: auto;
+        }
+
+        .thumbnail-sidebar h3 {
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .thumbnails-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .thumbnail-item {
+            position: relative;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .thumbnail-item:hover {
+            border-color: var(--primary-color);
+            transform: translateY(-2px);
+        }
+
+        .thumbnail-item.active {
+            border: 2px solid var(--primary-color);
+        }
+
+        .thumbnail-img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .thumbnail-actions {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            padding: 0.25rem;
+            border-bottom-left-radius: 4px;
+        }
+
+        .thumbnail-actions button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.8rem;
+        }
+
+        .thumbnail-actions button:hover {
+            color: var(--danger-color);
+        }
+
+        .thumbnail-number {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.8rem;
+            border-top-right-radius: 4px;
+        }
+
+        .preview-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .preview-container h3 {
+            padding: 1rem;
+            margin: 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .pdf-preview {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            overflow: auto;
+            position: relative;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: var(--light-text);
+        }
+
+        .empty-state i {
+            margin-bottom: 1rem;
+            color: #e0e0e0;
+        }
+
+        .preview-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 2rem;
+            padding: 1rem;
+            border-top: 1px solid var(--border-color);
+            background-color: var(--secondary-color);
+        }
+
+        #page-num {
+            font-weight: 600;
+            min-width: 100px;
+            text-align: center;
+        }
+
+        .app-footer {
+            text-align: center;
+            padding: 1rem;
+            background-color: white;
+            border-top: 1px solid var(--border-color);
+            color: var(--light-text);
+            font-size: 0.9rem;
+        }
+
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            position: relative;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--light-text);
+        }
+
+        .close-modal:hover {
+            color: var(--text-color);
+        }
+
+        .modal-options {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 2rem;
+            gap: 1rem;
+        }
+
+        .option {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1.5rem;
+            border: 1px dashed var(--border-color);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 50%;
+            text-align: center;
+        }
+
+        .option:hover {
+            border-color: var(--primary-color);
+            background-color: #f0f4ff;
+        }
+
+        .option i {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+        }
+
+        @media (max-width: 768px) {
+            .editor-container {
+                flex-direction: column;
+                height: auto;
+            }
+
+            .thumbnail-sidebar {
+                width: 100%;
+                height: 200px;
+                overflow-x: auto;
+                overflow-y: hidden;
+            }
+
+            .thumbnails-container {
+                flex-direction: row;
+            }
+
+            .thumbnail-item {
+                width: 120px;
+                flex-shrink: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <h1><i class="fas fa-file-pdf"></i> PDF Editor Pro</h1>
+            <p>Adicione, remova e reorganize páginas do seu PDF</p>
+        </header>
+
+        <div class="main-container">
+            <div class="toolbar">
+                <div class="file-upload">
+                    <label for="pdf-upload" class="btn btn-primary">
+                        <i class="fas fa-upload"></i> Carregar PDF
+                        <input type="file" id="pdf-upload" accept=".pdf" style="display: none;">
+                    </label>
+                    <button id="download-btn" class="btn btn-success" disabled>
+                        <i class="fas fa-download"></i> Baixar PDF
+                    </button>
+                </div>
+                <div class="page-actions">
+                    <button id="add-page-btn" class="btn" disabled>
+                        <i class="fas fa-plus"></i> Adicionar Página
+                    </button>
+                    <input type="file" id="add-pdf-upload" accept=".pdf" style="display: none;">
+                </div>
+            </div>
+
+            <div class="editor-container">
+                <div class="thumbnail-sidebar">
+                    <h3>Miniaturas</h3>
+                    <div id="thumbnails-container" class="thumbnails-container"></div>
+                </div>
+
+                <div class="preview-container">
+                    <h3>Visualização</h3>
+                    <div id="pdf-preview" class="pdf-preview">
+                        <div class="empty-state">
+                            <i class="fas fa-file-pdf fa-5x"></i>
+                            <p>Carregue um arquivo PDF para começar</p>
+                        </div>
+                    </div>
+                    <div class="preview-controls">
+                        <button id="prev-page" class="btn" disabled>
+                            <i class="fas fa-chevron-left"></i> Anterior
+                        </button>
+                        <span id="page-num">Página: 0/0</span>
+                        <button id="next-page" class="btn" disabled>
+                            Próxima <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="app-footer">
+            <p>© 2025 PDF Editor Pro - Todos os direitos reservados</p>
+        </footer>
+    </div>
+
+
+    <div id="add-page-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3>Adicionar Páginas</h3>
+            <div class="modal-options">
+                <div class="option" id="add-blank-page">
+                    <i class="fas fa-file"></i>
+                    <p>Página em Branco</p>
+                </div>
+                <div class="option" id="add-from-pdf">
+                    <i class="fas fa-file-pdf"></i>
+                    <p>De outro PDF</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <script>
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+
+        document.addEventListener('DOMContentLoaded', function () {
+
+            let pdfDoc = null,
+                currentPdfBytes = null,
+                pageNum = 1,
+                pageRendering = false,
+                pageNumPending = null,
+                scale = 1.0,
+                canvas = document.createElement('canvas'),
+                ctx = canvas.getContext('2d'),
+                thumbnailsContainer = document.getElementById('thumbnails-container'),
+                pdfUpload = document.getElementById('pdf-upload'),
+                downloadBtn = document.getElementById('download-btn'),
+                addPageBtn = document.getElementById('add-page-btn'),
+                prevPageBtn = document.getElementById('prev-page'),
+                nextPageBtn = document.getElementById('next-page'),
+                pageNumSpan = document.getElementById('page-num'),
+                pdfPreview = document.getElementById('pdf-preview'),
+                addPageModal = document.getElementById('add-page-modal'),
+                closeModal = document.querySelector('.close-modal'),
+                addBlankPage = document.getElementById('add-blank-page'),
+                addFromPdf = document.getElementById('add-from-pdf'),
+                addPdfUpload = document.getElementById('add-pdf-upload');
+
+
+            pdfUpload.addEventListener('change', handleFileUpload);
+            downloadBtn.addEventListener('click', downloadModifiedPdf);
+            addPageBtn.addEventListener('click', showAddPageModal);
+            prevPageBtn.addEventListener('click', onPrevPage);
+            nextPageBtn.addEventListener('click', onNextPage);
+            closeModal.addEventListener('click', hideAddPageModal);
+            addBlankPage.addEventListener('click', addBlankPageToPdf);
+            addFromPdf.addEventListener('click', () => addPdfUpload.click());
+            addPdfUpload.addEventListener('change', handleAddPdfUpload);
+
+
+            async function handleFileUpload(event) {
+                const file = event.target.files[0];
+                if (file.type !== 'application/pdf') {
+                    alert('Por favor, selecione um arquivo PDF válido.');
+                    return;
+                }
+
+                const fileReader = new FileReader();
+                fileReader.onload = async function () {
+                    currentPdfBytes = new Uint8Array(this.result);
+                    await loadPdf(currentPdfBytes);
+                };
+                fileReader.readAsArrayBuffer(file);
+            }
+
+            async function loadPdf(data) {
+                try {
+
+                    const loadingTask = pdfjsLib.getDocument(data);
+                    pdfDoc = await loadingTask.promise;
+                    pageNum = 1;
+
+
+                    thumbnailsContainer.innerHTML = '';
+                    pdfPreview.innerHTML = '';
+                    pdfPreview.appendChild(canvas);
+
+                    downloadBtn.disabled = false;
+                    addPageBtn.disabled = false;
+                    prevPageBtn.disabled = pdfDoc.numPages <= 1;
+                    nextPageBtn.disabled = pdfDoc.numPages <= 1;
+                    pageNumSpan.textContent = `Página: 1/${pdfDoc.numPages}`;
+
+                    await renderPage(pageNum);
+                    await renderThumbnails();
+                } catch (error) {
+                    console.error('Erro ao carregar PDF:', error);
+                    alert('Erro ao carregar o PDF. Por favor, tente novamente.');
+                }
+            }
+
+            async function renderPage(num) {
+                pageRendering = true;
+
+                try {
+                    const page = await pdfDoc.getPage(num);
+                    const viewport = page.getViewport({ scale: scale });
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+
+                    const renderContext = {
+                        canvasContext: ctx,
+                        viewport: viewport
+                    };
+
+                    await page.render(renderContext).promise;
+
+                    pageRendering = false;
+                    if (pageNumPending !== null) {
+                        renderPage(pageNumPending);
+                        pageNumPending = null;
+                    }
+                } catch (error) {
+                    console.error('Erro ao renderizar página:', error);
+                }
+
+                pageNumSpan.textContent = `Página: ${num}/${pdfDoc.numPages}`;
+
+                prevPageBtn.disabled = num <= 1;
+                nextPageBtn.disabled = num >= pdfDoc.numPages;
+
+                updateActiveThumbnail(num);
+            }
+
+            function onPrevPage() {
+                if (pageNum <= 1) return;
+                pageNum--;
+                queueRenderPage(pageNum);
+            }
+
+            function onNextPage() {
+                if (pageNum >= pdfDoc.numPages) return;
+                pageNum++;
+                queueRenderPage(pageNum);
+            }
+
+            function queueRenderPage(num) {
+                if (pageRendering) {
+                    pageNumPending = num;
+                } else {
+                    renderPage(num);
+                }
+            }
+
+            async function renderThumbnails() {
+                thumbnailsContainer.innerHTML = '';
+
+                for (let i = 1; i <= pdfDoc.numPages; i++) {
+                    try {
+                        const page = await pdfDoc.getPage(i);
+                        const viewport = page.getViewport(0.2);
+                        const thumbnailCanvas = document.createElement('canvas');
+                        const thumbnailCtx = thumbnailCanvas.getContext('2d');
+
+                        thumbnailCanvas.height = viewport.height;
+                        thumbnailCanvas.width = viewport.width;
+
+                        await page.render({
+                            canvasContext: thumbnailCtx,
+                            viewport: viewport
+                        }).promise;
+
+                        const thumbnailItem = document.createElement('div');
+                        thumbnailItem.className = 'thumbnail-item';
+                        if (i === 1) thumbnailItem.classList.add('active');
+
+                        thumbnailItem.innerHTML = `
+                            <img src="${thumbnailCanvas.toDataURL()}" class="thumbnail-img">
+                            <div class="thumbnail-number">${i}</div>
+                            <div class="thumbnail-actions">
+                                <button class="delete-thumbnail" data-page="${i}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        `;
+
+                        thumbnailItem.addEventListener('click', function () {
+                            pageNum = i;
+                            renderPage(pageNum);
+                        });
+
+                        thumbnailsContainer.appendChild(thumbnailItem);
+
+                        const deleteBtn = thumbnailItem.querySelector('.delete-thumbnail');
+                        deleteBtn.addEventListener('click', function (e) {
+                            e.stopPropagation();
+                            deletePage(i);
+                        });
+                    } catch (error) {
+                        console.error('Erro ao renderizar miniatura:', error);
+                    }
+                }
+            }
+
+            function updateActiveThumbnail(num) {
+                const thumbnails = document.querySelectorAll('.thumbnail-item');
+                thumbnails.forEach((thumb, index) => {
+                    if (index + 1 === num) {
+                        thumb.classList.add('active');
+                    } else {
+                        thumb.classList.remove('active');
+                    }
+                });
+            }
+
+            async function deletePage(pageNumToDelete) {
+                if (!confirm(`Tem certeza que deseja remover a página ${pageNumToDelete}?`)) return;
+
+                try {
+
+                    const pdfDoc = await PDFLib.PDFDocument.load(currentPdfBytes);
+                    pdfDoc.removePage(pageNumToDelete - 1);
+
+                    const modifiedPdfBytes = await pdfDoc.save();
+                    currentPdfBytes = modifiedPdfBytes;
+
+                    await loadPdf(modifiedPdfBytes);
+
+                    if (pageNum >= pdfDoc.getPageCount()) {
+                        pageNum = pdfDoc.getPageCount();
+                    }
+
+                    alert(`Página ${pageNumToDelete} removida com sucesso!`);
+                } catch (error) {
+                    console.error('Erro ao remover página:', error);
+                    alert('Erro ao remover página. Por favor, tente novamente.');
+                }
+            }
+
+            async function addBlankPageToPdf() {
+                hideAddPageModal();
+
+                try {
+
+                    const pdfDoc = await PDFLib.PDFDocument.load(currentPdfBytes);
+                    const page = pdfDoc.addPage();
+
+                    const [firstPage] = await pdfDoc.getPages();
+                    if (firstPage) {
+                        const { width, height } = firstPage.getSize();
+                        page.setSize(width, height);
+                    }
+
+                    const modifiedPdfBytes = await pdfDoc.save();
+                    currentPdfBytes = modifiedPdfBytes;
+
+                    await loadPdf(modifiedPdfBytes);
+
+                    pageNum = pdfDoc.getPageCount();
+                    await renderPage(pageNum);
+
+                    alert('Página em branco adicionada com sucesso!');
+                } catch (error) {
+                    console.error('Erro ao adicionar página em branco:', error);
+                    alert('Erro ao adicionar página em branco. Por favor, tente novamente.');
+                }
+            }
+
+            async function handleAddPdfUpload(event) {
+                const file = event.target.files[0];
+                if (file.type !== 'application/pdf') {
+                    alert('Por favor, selecione um arquivo PDF válido.');
+                    return;
+                }
+
+                hideAddPageModal();
+
+                try {
+
+                    const fileReader = new FileReader();
+                    const pdfBytes = await new Promise((resolve, reject) => {
+                        fileReader.onload = () => resolve(new Uint8Array(fileReader.result));
+                        fileReader.onerror = reject;
+                        fileReader.readAsArrayBuffer(file);
+                    });
+
+                    const mainPdfDoc = await PDFLib.PDFDocument.load(currentPdfBytes);
+                    const additionalPdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+                    const pages = await mainPdfDoc.copyPages(additionalPdfDoc,
+                        Array.from({ length: additionalPdfDoc.getPageCount() }, (_, i) => i));
+
+                    pages.forEach(page => mainPdfDoc.addPage(page));
+
+                    const modifiedPdfBytes = await mainPdfDoc.save();
+                    currentPdfBytes = modifiedPdfBytes;
+
+                    await loadPdf(modifiedPdfBytes);
+
+                    alert(`Páginas adicionadas com sucesso! Total: ${mainPdfDoc.getPageCount()} páginas.`);
+                } catch (error) {
+                    console.error('Erro ao adicionar páginas:', error);
+                    alert('Erro ao adicionar páginas. Por favor, tente novamente.');
+                }
+            }
+
+            async function downloadModifiedPdf() {
+                if (!currentPdfBytes) return;
+
+                try {
+                    const blob = new Blob([currentPdfBytes], { type: 'application/pdf' });
+                    saveAs(blob, 'documento-modificado.pdf');
+                } catch (error) {
+                    console.error('Erro ao baixar PDF:', error);
+                    alert('Erro ao baixar PDF. Por favor, tente novamente.');
+                }
+            }
+
+            function showAddPageModal() {
+                addPageModal.style.display = 'flex';
+            }
+
+            function hideAddPageModal() {
+                addPageModal.style.display = 'none';
+                addPdfUpload.value = '';
+            }
+
+            window.addEventListener('click', function (event) {
+                if (event.target === addPageModal) {
+                    hideAddPageModal();
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>
