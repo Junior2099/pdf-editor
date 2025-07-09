@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF Editor Pro - Edição de Páginas</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-     <link rel="icon" href="https://img.icons8.com/?size=100&id=mcyAsTDJNTI9&format=png&color=000000" type="image/png">
+    <link rel="icon" href="https://img.icons8.com/?size=100&id=mcyAsTDJNTI9&format=png&color=000000" type="image/png">
     <style>
         :root {
             --primary-color: #4a6bdf;
@@ -129,7 +129,7 @@
         }
 
         .thumbnail-sidebar {
-            width: 250px;
+            width: 300px;
             background-color: white;
             border-radius: 8px;
             padding: 1rem;
@@ -170,6 +170,8 @@
         .thumbnail-img {
             width: 100%;
             height: auto;
+            max-height: 150px;
+            object-fit: contain;
             display: block;
         }
 
@@ -353,8 +355,18 @@
             }
 
             .thumbnail-item {
-                width: 120px;
-                flex-shrink: 0;
+                position: relative;
+                border: 1px solid var(--border-color);
+                border-radius: 4px;
+                overflow: hidden;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                width: 150px;
+                height: 150px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background-color: #f8f8f8;
             }
         }
     </style>
@@ -442,6 +454,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
     <script>
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
 
@@ -581,46 +595,67 @@
                 for (let i = 1; i <= pdfDoc.numPages; i++) {
                     try {
                         const page = await pdfDoc.getPage(i);
-                        const viewport = page.getViewport(0.2);
+                        const viewport = page.getViewport({ scale: 0.2 }); 
+
                         const thumbnailCanvas = document.createElement('canvas');
                         const thumbnailCtx = thumbnailCanvas.getContext('2d');
 
                         thumbnailCanvas.height = viewport.height;
                         thumbnailCanvas.width = viewport.width;
 
+               
                         await page.render({
                             canvasContext: thumbnailCtx,
                             viewport: viewport
                         }).promise;
 
+                
                         const thumbnailItem = document.createElement('div');
                         thumbnailItem.className = 'thumbnail-item';
-                        if (i === 1) thumbnailItem.classList.add('active');
+                        if (i === pageNum) thumbnailItem.classList.add('active');
+
+                    
+                        const thumbnailImg = document.createElement('img');
+                        thumbnailImg.src = thumbnailCanvas.toDataURL();
+                        thumbnailImg.className = 'thumbnail-img';
+                        thumbnailImg.alt = `Página ${i}`;
+
 
                         thumbnailItem.innerHTML = `
-                            <img src="${thumbnailCanvas.toDataURL()}" class="thumbnail-img">
-                            <div class="thumbnail-number">${i}</div>
-                            <div class="thumbnail-actions">
-                                <button class="delete-thumbnail" data-page="${i}">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        `;
+                <div class="thumbnail-number">${i}</div>
+                <div class="thumbnail-actions">
+                    <button class="delete-thumbnail" data-page="${i}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+                        thumbnailItem.prepend(thumbnailImg);
 
                         thumbnailItem.addEventListener('click', function () {
                             pageNum = i;
-                            renderPage(pageNum);
+                            queueRenderPage(pageNum);
+                            updateActiveThumbnail(pageNum);
                         });
-
-                        thumbnailsContainer.appendChild(thumbnailItem);
 
                         const deleteBtn = thumbnailItem.querySelector('.delete-thumbnail');
                         deleteBtn.addEventListener('click', function (e) {
                             e.stopPropagation();
                             deletePage(i);
                         });
+
+                        thumbnailsContainer.appendChild(thumbnailItem);
+
                     } catch (error) {
-                        console.error('Erro ao renderizar miniatura:', error);
+                        console.error(`Erro ao renderizar miniatura da página ${i}:`, error);
+                        const errorThumbnail = document.createElement('div');
+                        errorThumbnail.className = 'thumbnail-item';
+                        errorThumbnail.innerHTML = `
+                <div style="width:150px;height:150px;background:#eee;display:flex;align-items:center;justify-content:center;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div class="thumbnail-number">${i}</div>
+            `;
+                        thumbnailsContainer.appendChild(errorThumbnail);
                     }
                 }
             }
