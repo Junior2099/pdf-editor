@@ -612,8 +612,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 // ── State ─────────────────────────────────────────────────────────────────────
 let pdfJsDoc = null;
 let pdfBytes = null;
-let selectedPages = new Set();  // 1-based logical page numbers
-let dragSrcIdx = null;
+let selectedPages = new Set();  // Set of card DOM elements
 let docName = '';
 
 // ── DOM ───────────────────────────────────────────────────────────────────────
@@ -731,9 +730,8 @@ async function buildCard(pageNum, isNew = false) {
   const card = document.createElement('div');
   card.className = 'page-card' + (isNew ? ' is-new' : '');
   card.dataset.page = pageNum;
-  card.draggable = true;
+  card.dataset.origPage = pageNum;
   card.style.animationDelay = `${Math.min((pageNum - 1) * 0.03, 0.4)}s`;
-  if (selectedPages.has(pageNum)) card.classList.add('selected');
 
   card.innerHTML = `
     <div class="card-img"><img src="${src}" loading="lazy"></div>
@@ -744,7 +742,10 @@ async function buildCard(pageNum, isNew = false) {
     <div class="card-new-badge">Novo</div>
   `;
 
-  card.addEventListener('click', () => toggleSelect(pageNum, card));
+  card.addEventListener('click', e => {
+    if (card.classList.contains('drag-moved')) return;
+    toggleSelect(card);
+  });
   setupCardDrag(card);
 
   if (isNew) setTimeout(() => card.classList.remove('is-new'), 2200);
@@ -760,121 +761,178 @@ function refreshNumbers() {
   });
 }
 
-// ── Selection ─────────────────────────────────────────────────────────────────
-function toggleSelect(pageNum, card) {
-  if (selectedPages.has(pageNum)) {
-    selectedPages.delete(pageNum);
+// ── Selection — keyed by card element, stable across DOM reorders ─────────────
+function toggleSelect(card) {
+  if (card.classList.contains('selected')) {
     card.classList.remove('selected');
+    selectedPages.delete(card);
   } else {
-    selectedPages.add(pageNum);
     card.classList.add('selected');
+    selectedPages.add(card);
   }
   updateSelBar();
 }
 
 clearSelBtn.addEventListener('click', () => {
+  selectedPages.forEach(c => c.classList.remove('selected'));
   selectedPages.clear();
-  getAllCards().forEach(c => c.classList.remove('selected'));
   updateSelBar();
 });
 
 // ── Delete ─────────────────────────────────────────────────────────────────────
 deleteBtn.addEventListener('click', async () => {
   if (!selectedPages.size) return;
-  const pages = [...selectedPages].sort((a,b) => a-b);
-  if (!confirm(`Excluir ${pages.length} página(s)?\n${pages.join(', ')}`)) return;
+  const cards = [...selectedPages];
+  if (!confirm(`Excluir ${cards.length} página(s)?`)) return;
   showLoader('Removendo páginas…');
   try {
-    const doc = await PDFLib.PDFDocument.load(pdfBytes);
-    [...selectedPages].sort((a,b)=>b-a).forEach(p => doc.removePage(p-1));
-    pdfBytes = await doc.save();
+    await applyCurrentOrder();
+    const allCards = getAllCards();
+    const toRemoveSet = new Set(cards);
+    const keepOrder = allCards
+      .filter(c => !toRemoveSet.has(c))
+      .map(c => parseInt(c.dataset.origPage) - 1);
+
+    const src = await PDFLib.PDFDocument.load(pdfBytes);
+    const dest = await PDFLib.PDFDocument.create();
+    const copied = await dest.copyPages(src, keepOrder);
+    copied.forEach(p => dest.addPage(p));
+    pdfBytes = await dest.save();
+
     selectedPages.clear();
     updateSelBar();
     await loadPdf(pdfBytes);
-    toast('success', `${pages.length} página(s) removida(s).`);
+    toast('success', `${cards.length} página(s) removida(s).`);
   } catch(e) {
     toast('error', 'Erro ao remover páginas.'); console.error(e);
   } finally { hideLoader(); }
 });
 
-// ── Drag reorder ──────────────────────────────────────────────────────────────
+// ── Drag reorder (pointer-based, DOM-only — no PDF rewrite on every move) ─────
+let dragState = null;
+
 function setupCardDrag(card) {
-  card.addEventListener('dragstart', onDragStart);
-  card.addEventListener('dragover',  onDragOver);
-  card.addEventListener('dragleave', onDragLeave);
-  card.addEventListener('drop',      onDrop);
-  card.addEventListener('dragend',   onDragEnd);
+  card.addEventListener('mousedown', onMouseDown);
 }
 
-function cardIndexOf(card) { return getAllCards().indexOf(card); }
+function onMouseDown(e) {
+  if (e.button !== 0) return;
+  if (e.target.closest('.card-check')) return;
 
-function onDragStart(e) {
-  dragSrcIdx = cardIndexOf(this);
-  this.classList.add('dragging');
-  e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/plain', 'card:' + dragSrcIdx);
-}
+  const card = this;
+  const rect = card.getBoundingClientRect();
 
-function onDragOver(e) {
+  const ghost = card.cloneNode(true);
+  ghost.style.cssText = `
+    position:fixed;z-index:9990;pointer-events:none;opacity:0.88;
+    width:${rect.width}px;height:${rect.height}px;
+    left:${rect.left}px;top:${rect.top}px;
+    box-shadow:0 8px 32px rgba(0,0,0,.28);transition:none;
+    border-radius:12px;transform:rotate(2deg) scale(1.04);
+    border:2px solid var(--accent);
+  `;
+  document.body.appendChild(ghost);
+
+  const indicator = document.createElement('div');
+  indicator.style.cssText = `
+    position:absolute;z-index:9989;pointer-events:none;
+    width:4px;background:var(--accent);border-radius:4px;
+    box-shadow:0 0 10px var(--accent);display:none;top:0;height:100%;
+  `;
+  pagesGrid.style.position = 'relative';
+  pagesGrid.appendChild(indicator);
+
+  card.classList.add('dragging');
+
+  dragState = {
+    card, ghost, indicator,
+    offX: e.clientX - rect.left,
+    offY: e.clientY - rect.top,
+    startX: e.clientX, startY: e.clientY,
+    moved: false, targetCard: null, insertBefore: true,
+  };
+
   e.preventDefault();
-  if (dragSrcIdx === null) return;
-  e.dataTransfer.dropEffect = 'move';
-  const all = getAllCards();
-  all.forEach(c => c.classList.remove('drop-before','drop-after'));
-  const ti = cardIndexOf(this);
-  if (ti === dragSrcIdx) return;
-  const rect = this.getBoundingClientRect();
-  if (e.clientX < rect.left + rect.width / 2) this.classList.add('drop-before');
-  else this.classList.add('drop-after');
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
 }
 
-function onDragLeave() { this.classList.remove('drop-before','drop-after'); }
+function onMouseMove(e) {
+  if (!dragState) return;
+  const { ghost, indicator, card } = dragState;
 
-async function onDrop(e) {
-  e.preventDefault();
-  const all = getAllCards();
-  all.forEach(c => c.classList.remove('drop-before','drop-after','dragging'));
+  if (!dragState.moved && Math.hypot(e.clientX - dragState.startX, e.clientY - dragState.startY) > 5) {
+    dragState.moved = true;
+  }
 
-  if (dragSrcIdx === null) return;
-  const dstIdx = cardIndexOf(this);
-  if (dragSrcIdx === dstIdx) { dragSrcIdx = null; return; }
+  ghost.style.left = (e.clientX - dragState.offX) + 'px';
+  ghost.style.top  = (e.clientY - dragState.offY) + 'px';
 
-  const rect = this.getBoundingClientRect();
-  const before = e.clientX < rect.left + rect.width / 2;
-  let insertAt = before ? dstIdx : dstIdx + 1;
-  if (dragSrcIdx < dstIdx) insertAt--;
+  const allCards = getAllCards().filter(c => c !== card);
+  let target = null, insertBefore = true;
 
-  // Build new page order (1-based)
-  const order = Array.from({ length: pdfJsDoc.numPages }, (_, i) => i + 1);
-  const [moved] = order.splice(dragSrcIdx, 1);
-  order.splice(insertAt, 0, moved);
+  for (const c of allCards) {
+    const r = c.getBoundingClientRect();
+    if (e.clientX >= r.left && e.clientX <= r.right &&
+        e.clientY >= r.top  && e.clientY <= r.bottom) {
+      target = c;
+      insertBefore = e.clientX < r.left + r.width / 2;
+      break;
+    }
+  }
 
-  showLoader('Reordenando…');
-  try {
-    const src  = await PDFLib.PDFDocument.load(pdfBytes);
-    const dest = await PDFLib.PDFDocument.create();
-    const copied = await dest.copyPages(src, order.map(p => p-1));
-    copied.forEach(p => dest.addPage(p));
-    pdfBytes = await dest.save();
+  dragState.targetCard = target;
+  dragState.insertBefore = insertBefore;
 
-    pdfJsDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
-    selectedPages.clear();
-    updateSelBar();
-    updateDocInfo(docName, pdfJsDoc.numPages);
-    await renderGrid();
-    toast('info', 'Ordem atualizada.');
-  } catch(err) {
-    toast('error', 'Erro ao reordenar.'); console.error(err);
-  } finally {
-    dragSrcIdx = null;
-    hideLoader();
+  if (target) {
+    const r = target.getBoundingClientRect();
+    const gr = pagesGrid.getBoundingClientRect();
+    indicator.style.display = 'block';
+    indicator.style.left   = (insertBefore ? r.left - gr.left - 3 : r.right - gr.left - 1) + 'px';
+    indicator.style.top    = (r.top - gr.top) + 'px';
+    indicator.style.height = r.height + 'px';
+  } else {
+    indicator.style.display = 'none';
   }
 }
 
-function onDragEnd() {
-  this.classList.remove('dragging');
-  getAllCards().forEach(c => c.classList.remove('drop-before','drop-after'));
-  dragSrcIdx = null;
+function onMouseUp() {
+  document.removeEventListener('mousemove', onMouseMove);
+  document.removeEventListener('mouseup', onMouseUp);
+  if (!dragState) return;
+
+  const { card, ghost, indicator, moved, targetCard, insertBefore } = dragState;
+  dragState = null;
+
+  ghost.remove();
+  indicator.remove();
+  card.classList.remove('dragging');
+
+  if (!moved || !targetCard) return;
+
+  card.classList.add('drag-moved');
+  setTimeout(() => card.classList.remove('drag-moved'), 150);
+
+  if (insertBefore) pagesGrid.insertBefore(card, targetCard);
+  else targetCard.after(card);
+
+  refreshNumbers();
+  toast('info', 'Ordem atualizada — será aplicada ao baixar.');
+}
+
+// Apply visual order to pdfBytes (called before download/delete)
+async function applyCurrentOrder() {
+  const allCards = getAllCards();
+  const origOrder = allCards.map(c => parseInt(c.dataset.origPage) - 1);
+  const alreadyOrdered = origOrder.every((v, i) => v === i);
+  if (alreadyOrdered) return;
+
+  const src  = await PDFLib.PDFDocument.load(pdfBytes);
+  const dest = await PDFLib.PDFDocument.create();
+  const copied = await dest.copyPages(src, origOrder);
+  copied.forEach(p => dest.addPage(p));
+  pdfBytes = await dest.save();
+  allCards.forEach((c, i) => { c.dataset.origPage = i + 1; });
 }
 
 // ── Global drag-and-drop to INSERT PDF ───────────────────────────────────────
@@ -910,6 +968,7 @@ document.addEventListener('drop', async e => {
   // Otherwise INSERT at the end, then user reorders
   showLoader(`Inserindo páginas de "${file.name}"…`);
   try {
+    await applyCurrentOrder(); // flush any pending reorder first
     const newBuf = new Uint8Array(await file.arrayBuffer());
     const baseDoc = await PDFLib.PDFDocument.load(pdfBytes);
     const addDoc  = await PDFLib.PDFDocument.load(newBuf);
@@ -929,10 +988,16 @@ document.addEventListener('drop', async e => {
 });
 
 // ── Download ──────────────────────────────────────────────────────────────────
-downloadBtn.addEventListener('click', () => {
+downloadBtn.addEventListener('click', async () => {
   if (!pdfBytes) return;
-  saveAs(new Blob([pdfBytes], { type: 'application/pdf' }), `${docName || 'documento'}-editado.pdf`);
-  toast('success', 'Download iniciado!');
+  showLoader('Preparando download…');
+  try {
+    await applyCurrentOrder();
+    saveAs(new Blob([pdfBytes], { type: 'application/pdf' }), `${docName || 'documento'}-editado.pdf`);
+    toast('success', 'Download iniciado!');
+  } catch(e) {
+    toast('error', 'Erro ao preparar download.'); console.error(e);
+  } finally { hideLoader(); }
 });
 
 // ── Upload card drop ──────────────────────────────────────────────────────────
